@@ -1,4 +1,5 @@
 import gc
+import os
 import uuid
 from datetime import datetime, timezone
 from multiprocessing import Lock
@@ -172,4 +173,6 @@ def _hello():
 
 
 if __name__ == '__main__':
-    app.run(port=5000, debug=True)
+    host = os.getenv("MORTAL_HOST") or '127.0.0.1'
+    port = os.getenv("MORTAL_PORT") or 5000
+    app.run(host=host, port=port)
