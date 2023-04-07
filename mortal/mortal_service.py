@@ -2,7 +2,8 @@ import gc
 import uuid
 from datetime import datetime, timezone
 from multiprocessing import Lock
-from time import time
+from threading import Thread
+from time import time, sleep
 from typing import Optional
 
 import torch
@@ -74,29 +75,51 @@ class Session:
 
 
 class SessionManager:
-    __slots__ = ("sessions", "lock")
+    __slots__ = ("sessions", "lock", "clean_deamon_thread")
 
     def __init__(self):
         self.sessions = {}
         self.lock = RWLockRead()
 
+        def clean_worker():
+            while True:
+                try:
+                    with self.lock.gen_wlock():
+                        now = time()
+                        for o in self.sessions.values():
+                            if now - o['last_access_time'] > 300:
+                                app.logger.info(f'remove inactive session {o["session"].session_id}')
+                except Exception as e:
+                    app.logger.exception(e)
+
+                sleep(60)
+
+        self.clean_deamon_thread = Thread(target=clean_worker, name="session_manager_clean_deamon")
+        self.clean_deamon_thread.start()
+
+
     def get(self, session_id: str) -> Optional[Session]:
         with self.lock.gen_rlock():
-            return self.sessions.get(session_id, None)
+            o = self.sessions.get(session_id, None)
+            o['last_access_time'] = time()
+            return o['session']
 
     def new(self, **kwargs) -> Session:
         session_id = str(uuid.uuid4())
         session = Session(session_id, **kwargs)
 
         with self.lock.gen_wlock():
-            self.sessions[session_id] = session
+            self.sessions[session_id] = {
+                "session": session,
+                "last_access_time": time()
+            }
 
         return session
 
     def destroy(self, session_id: str):
         with self.lock.gen_wlock():
-            session = self.sessions.pop(session_id)
-        session.destroy()
+            o = self.sessions.pop(session_id)
+        o['session'].destroy()
 
 
 mgr = SessionManager()
@@ -131,3 +154,12 @@ def post_session_react(session_id: str):
 def delete_session(session_id: str):
     mgr.destroy(session_id)
     return ''
+
+
+@app.route("/")
+def hello():
+    return "Hello, World!"
+
+
+if __name__ == '__main__':
+    app.run(port=5000, debug=True)
