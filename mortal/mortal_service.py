@@ -1,6 +1,5 @@
 import gc
 import os
-import uuid
 from datetime import datetime, timezone
 from multiprocessing import Lock
 from threading import Thread
@@ -167,9 +166,9 @@ def _get_session_events(session_id: int):
     return resp
 
 
-@app.route("/")
+@app.get("/hello")
 def _hello():
-    return "Hello, World!"
+    return "hello"
 
 
 if __name__ == '__main__':
