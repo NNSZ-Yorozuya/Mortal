@@ -1,9 +1,11 @@
+from functools import wraps
 import gc
 import os
 from datetime import datetime, timezone
 from multiprocessing import Lock
 from threading import Thread
 from time import time, sleep
+import traceback
 from typing import Optional
 
 import torch
@@ -125,7 +127,20 @@ class SessionManager:
 mgr = SessionManager()
 
 
+def handle_error(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except:
+            resp = make_response(traceback.format_exc(), 500)
+            resp.mimetype = "plain/text"
+            return resp
+    return wrapper
+
+
 @app.post("/sessions")
+@handle_error
 def _post_session():
     player_id = request.args.get('player_id', type=int)
     s = mgr.new(player_id=player_id)
@@ -133,12 +148,14 @@ def _post_session():
 
 
 @app.get("/sessions")
+@handle_error
 def _get_sessions():
     sessions = get_sessions()
     return sessions
 
 
 @app.post("/sessions/<int:session_id>")
+@handle_error
 def _post_session_event(session_id: int):
     s = mgr.get(session_id)
 
@@ -157,6 +174,7 @@ def _post_session_event(session_id: int):
 
 
 @app.get("/sessions/<int:session_id>")
+@handle_error
 def _get_session_events(session_id: int):
     events = get_events(session_id)
 
@@ -167,6 +185,7 @@ def _get_session_events(session_id: int):
 
 
 @app.get("/hello")
+@handle_error
 def _hello():
     return "hello"
 
